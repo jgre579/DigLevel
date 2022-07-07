@@ -5,6 +5,7 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -59,6 +60,7 @@ public class MainActivity extends AppCompatActivity {
             listView.setAdapter(adapter);
 
             listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+                @SuppressLint("MissingPermission")
                 @Override
                 public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                     //Toast.makeText(MainActivity.this, btDevices.get(position - 1).getName(), Toast.LENGTH_SHORT).show();
@@ -83,6 +85,7 @@ public class MainActivity extends AppCompatActivity {
         private String TAG = "gatt";
         BluetoothGattCallback bluetoothGattCallback =
                 new BluetoothGattCallback() {
+                    @SuppressLint("MissingPermission")
                     @Override
                     public void onConnectionStateChange(BluetoothGatt gatt, int status,
                                                         int newState) {
@@ -100,9 +103,48 @@ public class MainActivity extends AppCompatActivity {
                     public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
                         Log.d(TAG,"Notfy");
                         super.onCharacteristicChanged(gatt, characteristic);
+                        byte startByte = 0x55;
+                        byte angleByte = 0x61;
+                        float angleX, angleY, angleZ = 0;
                         final byte[] data = characteristic.getValue();
+
+                        Log.d(TAG, byteToHex(data[0]));
+                        Log.d(TAG, byteToHex(data[1]));
+
+                        if(data[0] == startByte && data[1] == angleByte) {
+
+                            byte rollH = data[15];
+                            byte rollL = data[14];
+
+                            byte pitchH= data[17];
+                            byte pitchL= data[16];
+
+                            byte yawH = data[19];
+                            byte yawL = data[18];
+
+                            Log.d(TAG, "Roll H: "+ rollH);
+                            Log.d(TAG, "Roll H b : "+ byteToHex(rollH));
+                            long t = (long) rollH * (256);
+                            long t1 = t + rollL;
+                            long t2 = t1/32768;
+                            long t3 = t2 * 180;
+                            angleX = (((float) rollH * 256 + rollL)/32768)*180;
+                            angleY = (((float) pitchH * 256 + pitchL)/32768)*180;
+                            angleZ = (((float) yawH * 256 + yawL)/32768)*180;
+
+//                            angleX = (((rollH<<8)|rollL)/32768) * 180;
+//                            angleY = ((pitchH<<8)|pitchL)/32768*180;
+//                            angleZ = ((yawH<<8)|yawL)/32768*180;
+
+                            Log.d("xyz", "X: " + String.valueOf(angleX) + " Y: " + String.valueOf(angleY) + " Z: " + String.valueOf(angleZ));
+
+                        }
+
+
                         for(byte b : data) {
-                            Log.d(TAG, byteToHex(b));
+
+                            //Log.d(TAG, byteToHex(b));
+                            //Log.d(TAG, String.valueOf(b));
                         }
                     }
 
@@ -113,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
                         return new String(hexDigits);
                     }
 
+                    @SuppressLint("MissingPermission")
                     @Override
                     public void onServicesDiscovered(BluetoothGatt gatt, int status) {
                         if (status == BluetoothGatt.GATT_SUCCESS) {
@@ -170,6 +213,7 @@ public class MainActivity extends AppCompatActivity {
     // Stops scanning after 10 seconds.
     private static final long SCAN_PERIOD = 10000;
 
+    @SuppressLint("MissingPermission")
     private void scanLeDevice() {
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
@@ -180,6 +224,7 @@ public class MainActivity extends AppCompatActivity {
         if (!scanning) {
             // Stops scanning after a predefined scan period.
             handler.postDelayed(new Runnable() {
+                @SuppressLint("MissingPermission")
                 @Override
                 public void run() {
                     scanning = false;
@@ -202,6 +247,7 @@ public class MainActivity extends AppCompatActivity {
     // Device scan callback.
     private ScanCallback leScanCallback =
             new ScanCallback() {
+                @SuppressLint("MissingPermission")
                 @Override
                 public void onScanResult(int callbackType, ScanResult result) {
                     super.onScanResult(callbackType, result);
