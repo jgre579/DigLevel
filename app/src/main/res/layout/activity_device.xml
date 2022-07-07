@@ -8,8 +8,10 @@
 
     <com.example.diglevel.CustomBullseye
         android:id="@+id/bullseye"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:src="@drawable/bullseye"
+        android:adjustViewBounds="true"
 
         />
 

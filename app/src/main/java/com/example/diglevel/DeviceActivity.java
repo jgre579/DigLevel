@@ -67,34 +67,30 @@ public class DeviceActivity extends AppCompatActivity {
     private int h;
     private int w;
 
-    private int[] transformAngleToScreen(int x, int y) {
+    private double[] transformAngleToScreen(double x, double y) {
 
         Log.d("wh", "x: " + x + " y: " + y);
         w = vh.bullseye.getWidth();
         h = vh.bullseye.getHeight();
         Log.d("wh", "Width: " + w + " Height: " + h);
 
-
-        double outputX_end = w;
-        double outputX_start= 0;
-
-        double outputY_end = h;
-        double outputY_start= 0;
-        double input_end = 90;
         double input_start = -90;
+        double input_end = 90;
 
-        int xOut, yOut;
+        //Used to emphasize inaccuracies, smaller angles make bigger changes to dot position.
+        double close_stretch = 2;
 
-        double slopeX = 1.0 * (outputX_end - outputX_start) / (input_end - input_start);
-        double slopeY = 1.0 * (outputY_end - outputY_start) / (input_end - input_start);
+        x = (x * close_stretch);
+        y = (y * close_stretch);
 
-        xOut = (int) (outputX_start + slopeX * (x - input_start));
-        yOut = (int) (outputY_start + slopeY * (x - input_start));
+
+        double xOut = ((x-input_start) * (w/(input_end*2)));
+        double yOut = ((y-input_start) * (h/(input_end*2)));
         Log.d("wh", "New w: " + xOut + " New h: " + yOut);
 
 
 
-        int[] xy = {xOut, yOut};
+        double[] xy = {xOut, yOut};
 
 
         return xy;
@@ -158,8 +154,8 @@ public class DeviceActivity extends AppCompatActivity {
 //                            angleZ = ((yawH<<8)|yawL)/32768*180;
 
                         Log.d("xyz", "X: " + String.valueOf(angleX) + " Y: " + String.valueOf(angleY) + " Z: " + String.valueOf(angleZ));
-                        int[] xy = transformAngleToScreen((int) angleX, (int) angleY);
-                        vh.bullseye.setCircleXY(xy[0], xy[1]);
+                        double[] xy = transformAngleToScreen(angleX, angleY);
+                        vh.bullseye.setCircleXY((float)xy[0],(float)xy[1]);
                         vh.bullseye.invalidate();
 
                     }
