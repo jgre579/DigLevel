@@ -43,14 +43,12 @@ import java.util.Set;
 import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
-    private UUID dataCharacteristic = UUID.fromString("0000ffe4-0000-1000-8000-00805f9a34fb");
+
     class ViewHolder {
         ArrayAdapter adapter;
         ListView listView;
         ArrayList<String> devices;
         ArrayList<BluetoothDevice> btDevices;
-
-
         public ViewHolder() {
             listView = (ListView) findViewById(R.id.devices_list);
             devices = new ArrayList<>();
@@ -72,199 +70,77 @@ public class MainActivity extends AppCompatActivity {
                         Toast.makeText(MainActivity.this, device.getName(), Toast.LENGTH_SHORT).show();
                     }
 
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        device.connectGatt(MainActivity.this, false, bluetoothGattCallback, BluetoothDevice.TRANSPORT_AUTO);
-                    } else {
-                        device.connectGatt(MainActivity.this, false, bluetoothGattCallback);
-                    }
+                    Intent intent = new Intent(getBaseContext(), DeviceActivity.class);
+                    intent.putExtra("ble_device", device);
+                    startActivity(intent);
+
 
                 }
             });
         }
+    }
 
-        private String TAG = "gatt";
-        BluetoothGattCallback bluetoothGattCallback =
-                new BluetoothGattCallback() {
+        ViewHolder vh;
+        private boolean scanning;
+        private Handler handler = new Handler();
+
+
+        // Stops scanning after 10 seconds.
+        private static final long SCAN_PERIOD = 10000;
+
+        @SuppressLint("MissingPermission")
+        private void scanLeDevice() {
+            BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+            if (bluetoothAdapter == null) {
+                Toast.makeText(this, "Bluetooth not supported", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
+            if (!scanning) {
+                // Stops scanning after a predefined scan period.
+                handler.postDelayed(new Runnable() {
                     @SuppressLint("MissingPermission")
                     @Override
-                    public void onConnectionStateChange(BluetoothGatt gatt, int status,
-                                                        int newState) {
-                        if (newState == BluetoothProfile.STATE_CONNECTED) {
-                            Log.i(TAG, "Connected to GATT server.");
-                            gatt.discoverServices();
-
-                        } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-
-                            Log.i(TAG, "Disconnected from GATT server.");
-                        }
+                    public void run() {
+                        scanning = false;
+                        Log.d("scan", "Scan finished");
+                        bluetoothLeScanner.stopScan(leScanCallback);
                     }
+                }, SCAN_PERIOD);
+                Log.d("scan", "Scanning...");
+                scanning = true;
 
-                    @Override
-                    public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-                        Log.d(TAG,"Notfy");
-                        super.onCharacteristicChanged(gatt, characteristic);
-                        byte startByte = 0x55;
-                        byte angleByte = 0x61;
-                        float angleX, angleY, angleZ = 0;
-                        final byte[] data = characteristic.getValue();
+                bluetoothLeScanner.startScan(leScanCallback);
+            } else {
+                scanning = false;
+                Log.d("scan", "Scan finished");
+                bluetoothLeScanner.stopScan(leScanCallback);
+            }
+        }
+        //private LeDeviceListAdapter leDeviceListAdapter = new LeDeviceListAdapter();
 
-                        Log.d(TAG, byteToHex(data[0]));
-                        Log.d(TAG, byteToHex(data[1]));
-
-                        if(data[0] == startByte && data[1] == angleByte) {
-
-                            byte rollH = data[15];
-                            byte rollL = data[14];
-
-                            byte pitchH= data[17];
-                            byte pitchL= data[16];
-
-                            byte yawH = data[19];
-                            byte yawL = data[18];
-
-                            Log.d(TAG, "Roll H: "+ rollH);
-                            Log.d(TAG, "Roll H b : "+ byteToHex(rollH));
-                            long t = (long) rollH * (256);
-                            long t1 = t + rollL;
-                            long t2 = t1/32768;
-                            long t3 = t2 * 180;
-                            angleX = (((float) rollH * 256 + rollL)/32768)*180;
-                            angleY = (((float) pitchH * 256 + pitchL)/32768)*180;
-                            angleZ = (((float) yawH * 256 + yawL)/32768)*180;
-
-//                            angleX = (((rollH<<8)|rollL)/32768) * 180;
-//                            angleY = ((pitchH<<8)|pitchL)/32768*180;
-//                            angleZ = ((yawH<<8)|yawL)/32768*180;
-
-                            Log.d("xyz", "X: " + String.valueOf(angleX) + " Y: " + String.valueOf(angleY) + " Z: " + String.valueOf(angleZ));
-
-                        }
-
-
-                        for(byte b : data) {
-
-                            //Log.d(TAG, byteToHex(b));
-                            //Log.d(TAG, String.valueOf(b));
-                        }
-                    }
-
-                    public String byteToHex(byte num) {
-                        char[] hexDigits = new char[2];
-                        hexDigits[0] = Character.forDigit((num >> 4) & 0xF, 16);
-                        hexDigits[1] = Character.forDigit((num & 0xF), 16);
-                        return new String(hexDigits);
-                    }
-
+        // Device scan callback.
+        private ScanCallback leScanCallback =
+                new ScanCallback() {
                     @SuppressLint("MissingPermission")
                     @Override
-                    public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-                        if (status == BluetoothGatt.GATT_SUCCESS) {
-                            List<BluetoothGattService> services = gatt.getServices();
-                            for (BluetoothGattService service : services) {
-                                List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
-                                for (BluetoothGattCharacteristic characteristic : characteristics) {
-                                    ///Once you have a characteristic object, you can perform read/write
-                                    //operations with it
-                                    Log.d(TAG, characteristic.getUuid().toString());
-                                    //gatt.readCharacteristic(characteristic);
+                    public void onScanResult(int callbackType, ScanResult result) {
+                        super.onScanResult(callbackType, result);
+                        Log.d("scan", "Result found");
+                        if (result.getDevice().getName() != null) {
+                            if (!vh.devices.contains(result.getDevice().getName())) {
 
-
-                                    if(characteristic.getUuid().equals(dataCharacteristic)) {
-                                        Log.d(TAG, "match found reading...");
-                                        //gatt.readCharacteristic(characteristic);
-
-                                        gatt.setCharacteristicNotification(characteristic, true);
-                                        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
-                                                UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"));
-                                        descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                                        gatt.writeDescriptor(descriptor);
-
-
-
-
-                                    }
-                                }
-
+                                vh.btDevices.add(result.getDevice());
+                                vh.devices.add(result.getDevice().getName());
+                                vh.adapter.notifyDataSetChanged();
 
                             }
-                        }
-                    }
-                    @Override
-                    public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-                        super.onCharacteristicRead(gatt, characteristic, status);
-                        final byte[] data = characteristic.getValue();
-                        for(byte b : data) {
-                            Log.d(TAG, byteToHex(b));
-                        }
-
-                    }
-                };
-
-
-    }
-
-    ViewHolder vh;
-
-
-    private boolean scanning;
-    private Handler handler = new Handler();
-
-
-    // Stops scanning after 10 seconds.
-    private static final long SCAN_PERIOD = 10000;
-
-    @SuppressLint("MissingPermission")
-    private void scanLeDevice() {
-        BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (bluetoothAdapter == null) {
-            Toast.makeText(this, "Bluetooth not supported", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
-        if (!scanning) {
-            // Stops scanning after a predefined scan period.
-            handler.postDelayed(new Runnable() {
-                @SuppressLint("MissingPermission")
-                @Override
-                public void run() {
-                    scanning = false;
-                    Log.d("scan", "Scan finished");
-                    bluetoothLeScanner.stopScan(leScanCallback);
-                }
-            }, SCAN_PERIOD);
-            Log.d("scan", "Scanning...");
-            scanning = true;
-
-            bluetoothLeScanner.startScan(leScanCallback);
-        } else {
-            scanning = false;
-            Log.d("scan", "Scan finished");
-            bluetoothLeScanner.stopScan(leScanCallback);
-        }
-    }
-    //private LeDeviceListAdapter leDeviceListAdapter = new LeDeviceListAdapter();
-
-    // Device scan callback.
-    private ScanCallback leScanCallback =
-            new ScanCallback() {
-                @SuppressLint("MissingPermission")
-                @Override
-                public void onScanResult(int callbackType, ScanResult result) {
-                    super.onScanResult(callbackType, result);
-                    Log.d("scan", "Result found");
-                    if (result.getDevice().getName() != null) {
-                        if(!vh.devices.contains(result.getDevice().getName())) {
-
-                            vh.btDevices.add(result.getDevice());
-                            vh.devices.add(result.getDevice().getName());
-                            vh.adapter.notifyDataSetChanged();
 
                         }
 
                     }
+        };
 
-                }
-            };
 
 
 

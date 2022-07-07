@@ -3,6 +3,8 @@
   <component name="DesignSurface">
     <option name="filePathToZoomLevelMap">
       <map>
+        <entry key="..\:/Users/Jorda/OneDrive/Desktop/UoA2022/Apps/DigLevel/app/src/main/res/drawable/dot.xml" value="0.235" />
+        <entry key="..\:/Users/Jorda/OneDrive/Desktop/UoA2022/Apps/DigLevel/app/src/main/res/layout/activity_device.xml" value="0.17757009345794392" />
         <entry key="..\:/Users/Jorda/OneDrive/Desktop/UoA2022/Apps/DigLevel/app/src/main/res/layout/activity_device_list_item.xml" value="0.10840932117527863" />
         <entry key="..\:/Users/Jorda/OneDrive/Desktop/UoA2022/Apps/DigLevel/app/src/main/res/layout/activity_main.xml" value="0.1" />
       </map>
