@@ -10,22 +10,31 @@ import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothProfile;
+import android.bluetooth.le.ScanResult;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.welie.blessed.BluetoothBytesParser;
+import com.welie.blessed.BluetoothCentralManager;
+import com.welie.blessed.BluetoothCentralManagerCallback;
+import com.welie.blessed.BluetoothPeripheral;
+import com.welie.blessed.BluetoothPeripheralCallback;
+import com.welie.blessed.GattStatus;
+import com.welie.blessed.HciStatus;
+import com.welie.blessed.WriteType;
+
 import java.util.List;
 import java.util.UUID;
 
 public class DeviceActivity extends AppCompatActivity {
-    private UUID dataCharacteristic = UUID.fromString("0000ffe4-0000-1000-8000-00805f9a34fb");
-
-
 
     class ViewHolder {
         CustomBullseye bullseye;
@@ -42,11 +51,13 @@ public class DeviceActivity extends AppCompatActivity {
         }
     }
     ViewHolder vh;
+    BluetoothCentralManager central;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_device);
-        BluetoothDevice device = getIntent().getParcelableExtra("ble_device");
+        String macAddr = getIntent().getStringExtra("ble_device");
+        central = new BluetoothCentralManager(getApplicationContext(), bluetoothCentralManagerCallback, new Handler(Looper.getMainLooper()));
         vh = new ViewHolder();
 
         Bitmap dbitmap = BitmapFactory.decodeResource(getResources(), R.drawable.bullseye);
@@ -54,18 +65,94 @@ public class DeviceActivity extends AppCompatActivity {
         vh.bullseye.setImageBitmap(bitmap);
         vh.bullseye.invalidate();
 
+        BluetoothPeripheral peripheral = central.getPeripheral(macAddr);
+        Log.d("gatt", "Passed to device: " + peripheral.getName());
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            device.connectGatt(DeviceActivity.this, false, bluetoothGattCallback, BluetoothDevice.TRANSPORT_AUTO);
-        } else {
-            device.connectGatt(DeviceActivity.this, false, bluetoothGattCallback);
-        }
-        Toast.makeText(this, device.getName(), Toast.LENGTH_SHORT).show();
+        Log.d(TAG, "Attempting Connect");
+        central.connectPeripheral(peripheral, peripheralCallback);
+
+
+        //Toast.makeText(this, device.getName(), Toast.LENGTH_SHORT).show();
 
     }
 
+
+    String TAG = "gatt";
+    private final BluetoothPeripheralCallback peripheralCallback = new BluetoothPeripheralCallback() {
+
+        public void onConnectedPeripheral(BluetoothPeripheral peripheral) {
+
+            Log.d(TAG, "Peripheral connected");
+
+        }
+        public void onConnectionFailed(BluetoothPeripheral peripheral, HciStatus status) {
+
+        }
+        public void onDisconnectedPeripheral(BluetoothPeripheral peripheral, HciStatus status) {
+
+        }
+
+
+
+        public void onServicesDiscovered(BluetoothPeripheral peripheral) {
+
+            Log.d(TAG, "Services discovered");
+            BluetoothGattService service =  peripheral.getService(UUID.fromString("0000ffe5-0000-1000-8000-00805f9a34fb"));
+            BluetoothGattCharacteristic notifyChar =  peripheral.getCharacteristic(service.getUuid(), UUID.fromString("0000ffe4-0000-1000-8000-00805f9a34fb"));
+            BluetoothGattCharacteristic writeChar =  peripheral.getCharacteristic(service.getUuid(), UUID.fromString("0000ffe9-0000-1000-8000-00805f9a34fb"));
+            Log.d(TAG, "Notify : " + notifyChar.getUuid().toString());
+            Log.d(TAG, "Write : " + writeChar.getUuid().toString());
+
+            peripheral.setNotify(notifyChar, true);
+            byte[] commandAltitude = {(byte) 0xFF, (byte) 0xAA, 0x27, 0x45 ,0x00};
+            peripheral.writeCharacteristic(writeChar, commandAltitude, WriteType.WITHOUT_RESPONSE);
+
+
+        }
+        public void onCharacteristicUpdate(BluetoothPeripheral peripheral, byte[] value, BluetoothGattCharacteristic characteristic, GattStatus status) {
+
+            final byte[] data = characteristic.getValue();
+            String x = "";
+
+            for (int i = 0; i < data.length; i++) {
+
+                x = x + byteToHex(data[i]) + " ";
+
+            }
+
+            Log.d(TAG, x);
+            newData(data);
+
+
+        }
+
+        public void onCharacteristicWrite(BluetoothPeripheral peripheral, byte[] value, BluetoothGattCharacteristic characteristic, final GattStatus status) {
+
+            Log.d(TAG, "WRITTEN");
+
+        }
+
+
+        public String byteToHex(byte num) {
+                    char[] hexDigits = new char[2];
+                    hexDigits[0] = Character.forDigit((num >> 4) & 0xF, 16);
+                    hexDigits[1] = Character.forDigit((num & 0xF), 16);
+                    return new String(hexDigits);
+        }
+
+    };
+
+
+
+
+
+    private final BluetoothCentralManagerCallback bluetoothCentralManagerCallback = new BluetoothCentralManagerCallback() {
+
+    };
+
     private double calibrationX, calibrationY = 0.0f;
-    float angleX, angleY, angleZ = 0;
+    double angleX, angleY, angleZ = 0;
+    double cAngleX, cAngleY, cAngleZ = 0;
 
     public void clickCalibrate(View view) {
 
@@ -87,6 +174,7 @@ public class DeviceActivity extends AppCompatActivity {
 
     private double[] calibrate(double x, double y) {
 
+
         double xOut = x + calibrationX;
         double yOut = y + calibrationY;
         vh.calibrateTV.setText("Current Calibration X : " + String.format("%.2f",calibrationX) + deg + " Y: " + String.format("%.2f",calibrationY) + deg );
@@ -100,10 +188,10 @@ public class DeviceActivity extends AppCompatActivity {
 
     private double[] transformAngleToScreen(double x, double y) {
 
-        Log.d("wh", "x: " + x + " y: " + y);
+        //Log.d("wh", "x: " + x + " y: " + y);
         w = vh.bullseye.getWidth();
         h = vh.bullseye.getHeight();
-        Log.d("wh", "Width: " + w + " Height: " + h);
+        //Log.d("wh", "Width: " + w + " Height: " + h);
 
         double input_start = -90;
         double input_end = 90;
@@ -117,7 +205,7 @@ public class DeviceActivity extends AppCompatActivity {
 
         double xOut = ((x-input_start) * (w/(input_end*2)));
         double yOut = ((y-input_start) * (h/(input_end*2)));
-        Log.d("wh", "New w: " + xOut + " New h: " + yOut);
+        //Log.d("wh", "New w: " + xOut + " New h: " + yOut);
 
 
 
@@ -145,125 +233,29 @@ public class DeviceActivity extends AppCompatActivity {
             byte yawH = data[19];
             byte yawL = data[18];
 
-            angleX = (((float) rollH * 256 + rollL)/32768)*180;
-            angleY = (((float) pitchH * 256 + pitchL)/32768)*180;
-            angleZ = (((float) yawH * 256 + yawL)/32768)*180;
+            angleX = (( rollH * 256.0 + rollL)/32768)*180;
+            angleY = (( pitchH * 256.0 + pitchL)/32768)*180;
+            angleZ = (( yawH * 256.0 + yawL)/32768)*180;
 
             double[] calxy = calibrate(angleX, angleY);
-            angleX = (float) calxy[0];
-            angleY = (float) calxy[1];
+            cAngleX = calxy[0];
+            cAngleY = calxy[1];
 
 
 
 
-            vh.xTV.setText("X: " + String.format("%.2f",angleX) + deg);
-            vh.yTV.setText("Y: " + String.format("%.2f", angleY) + deg);
+            vh.xTV.setText("X: " + String.format("%.2f",cAngleX) + deg);
+            vh.yTV.setText("Y: " + String.format("%.2f", cAngleY) + deg);
             vh.zTV.setText("Z: " + String.format("%.2f", angleZ) + deg);
 
-            Log.d("xyz", "X: " + String.valueOf(angleX) + " Y: " + String.valueOf(angleY) + " Z: " + String.valueOf(angleZ));
-            double[] xy = transformAngleToScreen(angleX, angleY);
-            vh.bullseye.setCircleXY((float)xy[0],(float)xy[1]);
+            Log.d("xyz", "X: " + String.valueOf(cAngleX) + " Y: " + String.valueOf(cAngleY) + " Z: " + String.valueOf(angleZ));
+            double[] xy = transformAngleToScreen(cAngleX, cAngleY);
+            vh.bullseye.setCircleXY(xy[0], xy[1]);
             vh.bullseye.invalidate();
 
         }
     }
 
-    private String TAG = "gatt";
-
-    BluetoothGattCallback bluetoothGattCallback =
-            new BluetoothGattCallback() {
-                @SuppressLint("MissingPermission")
-                @Override
-                public void onConnectionStateChange(BluetoothGatt gatt, int status,
-                                                    int newState) {
-                    if (newState == BluetoothProfile.STATE_CONNECTED) {
-                        Log.i(TAG, "Connected to GATT server.");
-                        gatt.discoverServices();
-
-                    } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-
-                        Log.i(TAG, "Disconnected from GATT server.");
-                    }
-                }
-
-                @Override
-                public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-                    //Log.d(TAG,"Notify");
-                    super.onCharacteristicChanged(gatt, characteristic);
-                    final byte[] data = characteristic.getValue();
-                    String x = "";
-                    for (int i = 0; i < data.length; i++) {
-
-                        x = x + byteToHex(data[i]) + " ";
-
-                    }
-
-                    Log.d(TAG, x);
-
-
-                }
-
-
-
-                public String byteToHex(byte num) {
-                    char[] hexDigits = new char[2];
-                    hexDigits[0] = Character.forDigit((num >> 4) & 0xF, 16);
-                    hexDigits[1] = Character.forDigit((num & 0xF), 16);
-                    return new String(hexDigits);
-                }
-
-                @SuppressLint("MissingPermission")
-                @Override
-                public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-                    if (status == BluetoothGatt.GATT_SUCCESS) {
-                        List<BluetoothGattService> services = gatt.getServices();
-                        for (BluetoothGattService service : services) {
-                            List<BluetoothGattCharacteristic> characteristics = service.getCharacteristics();
-                            for (BluetoothGattCharacteristic characteristic : characteristics) {
-
-                                ///Once you have a characteristic object, you can perform read/write
-                                //operations with it
-                                Log.d(TAG, characteristic.getUuid().toString());
-
-                               
-
-
-                                if(characteristic.getUuid().equals(dataCharacteristic)) {
-                                    Log.d(TAG, "match found reading...");
-                                    gatt.readCharacteristic(characteristic);
-
-                                    gatt.setCharacteristicNotification(characteristic, true);
-                                    BluetoothGattDescriptor descriptor = characteristic.getDescriptor(
-                                            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"));
-                                    descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                                    gatt.writeDescriptor(descriptor);
-
-
-
-
-
-                                }
-                            }
-
-
-                        }
-                    }
-                }
-                @Override
-                public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-                    super.onCharacteristicWrite(gatt, characteristic, status);
-                    Log.d(TAG, "Characteristic " + characteristic.getUuid() + " written");
-                }
-                @Override
-                public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-                    super.onCharacteristicRead(gatt, characteristic, status);
-                    final byte[] data = characteristic.getValue();
-                    for(byte b : data) {
-                        Log.d(TAG, byteToHex(b));
-                    }
-
-                }
-            };
 
 
 

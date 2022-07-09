@@ -38,7 +38,7 @@ public class CustomBullseye extends androidx.appcompat.widget.AppCompatImageView
         p = new Paint(Paint.ANTI_ALIAS_FLAG);
     }
 
-    float x, y=0.0f;
+    double x, y=0.0f;
 
     @Override
     protected void onDraw(Canvas c) {
@@ -46,13 +46,13 @@ public class CustomBullseye extends androidx.appcompat.widget.AppCompatImageView
 
         super.onDraw(c);
         p.setColor(Color.BLACK);
-        c.drawCircle(x,y,50,p);
+        c.drawCircle((float) x,(float)y,50,p);
 
     }
 
 
 
-    public void setCircleXY(float x, float y) {
+    public void setCircleXY(double x, double y) {
         this.x = x;
         this.y = y;
 

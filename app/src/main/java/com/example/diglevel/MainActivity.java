@@ -28,6 +28,8 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
+import android.os.Parcelable;
 import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
@@ -41,6 +43,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import com.welie.blessed.*;
+
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -48,7 +53,7 @@ public class MainActivity extends AppCompatActivity {
         ArrayAdapter adapter;
         ListView listView;
         ArrayList<String> devices;
-        ArrayList<BluetoothDevice> btDevices;
+        ArrayList<BluetoothPeripheral> btDevices;
         public ViewHolder() {
             listView = (ListView) findViewById(R.id.devices_list);
             devices = new ArrayList<>();
@@ -62,7 +67,7 @@ public class MainActivity extends AppCompatActivity {
                 @Override
                 public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                     //Toast.makeText(MainActivity.this, btDevices.get(position - 1).getName(), Toast.LENGTH_SHORT).show();
-                    BluetoothDevice device;
+                    BluetoothPeripheral device;
                     if (position > btDevices.size()) {
                         return;
                     } else {
@@ -71,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
                     }
 
                     Intent intent = new Intent(getBaseContext(), DeviceActivity.class);
-                    intent.putExtra("ble_device", device);
+                    intent.putExtra("ble_device", (Parcelable) device);
                     startActivity(intent);
 
 
@@ -81,68 +86,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
         ViewHolder vh;
-        private boolean scanning;
-        private Handler handler = new Handler();
-
-
-        // Stops scanning after 10 seconds.
-        private static final long SCAN_PERIOD = 10000;
-
-        @SuppressLint("MissingPermission")
-        private void scanLeDevice() {
-            BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-            if (bluetoothAdapter == null) {
-                Toast.makeText(this, "Bluetooth not supported", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            BluetoothLeScanner bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
-            if (!scanning) {
-                // Stops scanning after a predefined scan period.
-                handler.postDelayed(new Runnable() {
-                    @SuppressLint("MissingPermission")
-                    @Override
-                    public void run() {
-                        scanning = false;
-                        Log.d("scan", "Scan finished");
-                        bluetoothLeScanner.stopScan(leScanCallback);
-                    }
-                }, SCAN_PERIOD);
-                Log.d("scan", "Scanning...");
-                scanning = true;
-
-                bluetoothLeScanner.startScan(leScanCallback);
-            } else {
-                scanning = false;
-                Log.d("scan", "Scan finished");
-                bluetoothLeScanner.stopScan(leScanCallback);
-            }
-        }
-        //private LeDeviceListAdapter leDeviceListAdapter = new LeDeviceListAdapter();
-
-        // Device scan callback.
-        private ScanCallback leScanCallback =
-                new ScanCallback() {
-                    @SuppressLint("MissingPermission")
-                    @Override
-                    public void onScanResult(int callbackType, ScanResult result) {
-                        super.onScanResult(callbackType, result);
-                        Log.d("scan", "Result found");
-                        if (result.getDevice().getName() != null) {
-                            if (!vh.devices.contains(result.getDevice().getName())) {
-
-                                vh.btDevices.add(result.getDevice());
-                                vh.devices.add(result.getDevice().getName());
-                                vh.adapter.notifyDataSetChanged();
-
-                            }
-
-                        }
-
-                    }
-        };
-
-
-
+    private String TAG = "gatt";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -152,27 +96,38 @@ public class MainActivity extends AppCompatActivity {
         vh = new ViewHolder();
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         initBluetooth(bluetoothAdapter);
-        getBluetoothDevices(bluetoothAdapter);
         checkPermissions();
 
-        scanLeDevice();
+
+
+// Create BluetoothCentral and receive callbacks on the main thread
+        central = new BluetoothCentralManager(getApplicationContext(), bluetoothCentralManagerCallback, new Handler(Looper.getMainLooper()));
+
+// Scan for peripherals with a certain service UUID
+        Log.d(TAG, "Starting scan");
+        String[] names = {"WT901BLE67"};
+        central.scanForPeripheralsWithNames(names);
 
     }
 
-    private void getBluetoothDevices(BluetoothAdapter bluetoothAdapter) {
+    BluetoothCentralManager central;
 
-        if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_DENIED) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.BLUETOOTH_SCAN}, 2);
-                return;
-            }
+    private final BluetoothCentralManagerCallback bluetoothCentralManagerCallback = new BluetoothCentralManagerCallback() {
+        @Override
+        public void onDiscoveredPeripheral(BluetoothPeripheral peripheral, ScanResult scanResult) {
+            Log.d(TAG, "Peripheral Discovered " + peripheral.getName());
+            central.stopScan();
+            central.close();
+            String macAddr = peripheral.getAddress();
+            Intent intent = new Intent(getBaseContext(), DeviceActivity.class);
+            intent.putExtra("ble_device", macAddr);
+            startActivity(intent);
         }
+    };
 
 
 
 
-
-    }
 
     private void initBluetooth(BluetoothAdapter bluetoothAdapter) {
 
@@ -190,10 +145,6 @@ public class MainActivity extends AppCompatActivity {
         }
 
         checkPermissions();
-
-
-
-
 
     }
 
